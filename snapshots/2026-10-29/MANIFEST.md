@@ -32,6 +32,7 @@ over-temperature protection and a low power cap.
 | `Configuration.h` | `MAX_CHAMBER_POWER` | 64 | 25 % duty, true ceiling |
 | `Configuration.h` | `TEMP_SENSOR_REDUNDANT_MAX_DIFF` | 80 | placeholder, measurement needed |
 | `Configuration.h` | `PID_FUNCTIONAL_RANGE` | 20 | no default in source |
+| `Configuration.h` | `EEPROM_SETTINGS` | on | 24C16 on I2C-0 (PA11/PA12), 2 K |
 | `Configuration_adv.h` | `HEATER_CHAMBER_PIN` | PA1 | TEC drive |
 | `Configuration_adv.h` | `CHAMBER_FAN` | on, idx 0, mode 0, base 200 | PA0 stir fan |
 | `Configuration_adv.h` | `THERMAL_PROTECTION_CHAMBER_PERIOD` | 120 | |
@@ -40,6 +41,27 @@ over-temperature protection and a low power cap.
 | `Configuration_adv.h` | `WATCH_CHAMBER_TEMP_INCREASE` | 1 | |
 
 ## Revision history
+
+### EEPROM revision
+
+`EEPROM_SETTINGS` was absent because the GD32F303RET6 has no data-EEPROM and
+GD32_MFL has no flash emulation. That was only half the picture: the V4.2.2
+carries a 2 K 24C16 on I2C-0, and `pins_CREALITY_V4.h` selects it automatically
+through `NO_EEPROM_SELECTED` (`IIC_BL24CXX_EEPROM`, `MARLIN_EEPROM_SIZE 0x800U`,
+PA11/PA12). GD32_MFL ships `eeprom_bl24cxx.cpp` for it, so enabling the feature
+is the only change required.
+
+| Macro | Was | Now |
+|---|---|---|
+| `EEPROM_SETTINGS` | off | on |
+| `EEPROM_AUTO_INIT` | — | on |
+
+Consequences: `M500`/`M501`/`M502`/`M503` exist, chamber PID gains are saved
+(`M309` then `M500`), and the first boot on a board that previously ran a printer
+must be cleared with `M502` then `M500`. README §10 is the resulting first-run
+checklist.
+
+### Temperature revision
 
 Changes in this revision (triggered by the corrected 24–27 °C sample band):
 
@@ -69,7 +91,10 @@ array sizes cut to one axis, `BABYSTEPPING` off, `EMERGENCY_PARSER` and
   at 26 °C.
 - `MAX_CHAMBER_POWER 64` is a first guess. Halve it if the chamber overshoots.
 - PID gains are Marlin's 200 W SSR example, not a Peltier tune. Autotune at an
-  8 °C delta may fail to converge.
+  8 °C delta may fail to converge. They are now runtime values — `M309` then
+  `M500` — so a tune no longer needs a reflash.
+- The 24C16 may still hold the previous printer firmware's settings. `M502` then
+  `M500` once, before any tuning.
 - Never compiled. No ARM toolchain or PlatformIO was available at handover.
 
 ## Files

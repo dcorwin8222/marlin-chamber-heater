@@ -39,6 +39,7 @@
  *   M191 S26        set chamber target and wait
  *   M105            C = chamber air,  M105 R adds R = TEC hot plate
  *   M303 E-2 S26 C8 autotune the chamber PID
+ *   M309 P.. I.. D.. set chamber PID gains, then M500 to save them
  *   M112            emergency stop
  */
 
@@ -168,9 +169,9 @@
  * cutting drive does not stop heat entering the chamber. Treat
  * MAX_CHAMBER_POWER as the real control and see README.
  *
- * M303 E-2 prints its result as CHAMBER_KP; with no EEPROM it has to be pasted
- * back in here and reflashed. At an 8C delta above ambient autotune often fails
- * outright - do not count on it.
+ * M303 E-2 prints its result as CHAMBER_KP. Feed the numbers back with
+ * M309 P.. I.. D.. and persist them with M500 - no reflash. At an 8C delta
+ * above ambient autotune often fails outright - do not count on it.
  */
 #define PIDTEMPCHAMBER
 #define MAX_CHAMBER_POWER  64   // (of 255) 25% duty; halve it if it overshoots
@@ -258,17 +259,27 @@
 //===========================================================================
 
 /**
- * Deliberately no EEPROM_SETTINGS.
+ * Persistent settings, backed by the 24C16 on the board.
  *
- * The GD32_MFL HAL has no internal-flash EEPROM. Its only fallbacks are
- * SDCARD_EEPROM_EMULATION (needs an SD card and SDSUPPORT) or an external
- * I2C/SPI chip - neither is fitted. Enabling EEPROM_SETTINGS without one is a
- * hard build error in HAL/GD32_MFL/inc/SanityCheck.h.
+ * The GD32F303RET6 has no data-EEPROM of its own, and GD32_MFL ships no
+ * internal-flash emulation. What it does ship is eeprom_bl24cxx.cpp, a
+ * bit-banged backend for the 2K 24C16 that the V4.2.2 carries on I2C-0.
  *
- * Consequence: M500/M501/M503 do not exist, and anything tuned at runtime is
- * lost on power-off. PID gains from M303 must be written into this file and
- * the firmware reflashed.
+ * pins_CREALITY_V4.h selects it on its own: NO_EEPROM_SELECTED means "this
+ * build wants an EEPROM and no backend was chosen", so enabling
+ * EEPROM_SETTINGS here is enough - it defines IIC_BL24CXX_EEPROM and
+ * MARLIN_EEPROM_SIZE 0x800U, using PA11/PA12 (idle USB pins on this chip).
+ *
+ * Consequence: M500/M501/M502/M503 exist, and the chamber PID gains are part
+ * of the saved blob, so M303 -> M309 -> M500 survives power-off.
+ *
+ * If M500 reports "EEPROM write error" while M501 reads fine, the 24C16's
+ * write-protect pin is strapped high on that board. Reads still work.
  */
+#define EEPROM_SETTINGS
+#if ENABLED(EEPROM_SETTINGS)
+  #define EEPROM_AUTO_INIT    // Init on first boot, or after a version/CRC mismatch
+#endif
 
 //===========================================================================
 //============================= Nothing else ================================

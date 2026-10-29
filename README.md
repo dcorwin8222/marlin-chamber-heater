@@ -119,7 +119,7 @@ allowed and is the ceiling; `S28` is silently clamped.
   straight from `TEMP_1_PIN`; `TEMP_SENSOR_1` stays `0`.
 - One dummy X axis. Marlin cannot build with `NUM_AXES 0` (`SanityCheck.h`
   indexes the step-rate arrays unconditionally), so X is declared and never used.
-- No `EEPROM_SETTINGS` — see §8.
+- `EEPROM_SETTINGS` on the board's 2K 24C16 (`PA11`/`PA12`) — see §8.
 
 `Configuration_adv.h` differs from the stock Creality V4.2.2 example in the places
 below. Only the first three are electrical; the rest are build requirements,
@@ -154,6 +154,9 @@ of a degree or two past target and do not read that as a fault.
 ---
 
 ## 6. Commissioning
+
+First power-up? Work through §10 in order — it is the safe sequence. This
+section is the G-code reference behind it.
 
 Send these over the host UART. Every reply ends in `ok`.
 
@@ -194,9 +197,14 @@ Send these over the host UART. Every reply ends in `ok`.
    ```
 
    `E-2` is Marlin's internal id for the chamber heater (`H_CHAMBER`). The result
-   prints as `Kp`, `Ki`, `Kd` — but note the config macros are `DEFAULT_CHAMBER_KP`
-   and so on. With no EEPROM the result must be pasted into `Configuration.h` and
-   reflashed; `M500` does not exist here.
+   prints as `Kp`, `Ki`, `Kd` — note the config macros are `DEFAULT_CHAMBER_KP`
+   and so on. Feed the numbers back with `M309` and keep them with `M500`:
+
+   ```
+   M309 P<kp> I<ki> D<kd>
+   M500
+   M503          (read them back; they survive power-off)
+   ```
 
 5. **Set `TEMP_SENSOR_REDUNDANT_MAX_DIFF`.** This is the one value that must be
    measured, not guessed:
@@ -235,10 +243,15 @@ Send these over the host UART. Every reply ends in `ok`.
 
 ## 8. Limits worth knowing
 
-- **No EEPROM.** The GD32_MFL HAL has no internal-flash emulation; its only
-  fallbacks are an SD card or an external I2C/SPI chip, and neither is fitted.
-  Enabling `EEPROM_SETTINGS` is a hard build error, so `M500`/`M501`/`M503` do
-  not exist. PID gains are compile-time: tune, paste, reflash.
+- **EEPROM is external, and shared with the old firmware.** The GD32F303RET6 has
+  no data-EEPROM and GD32_MFL has no flash emulation, so this build uses the 2K
+  24C16 the board carries on I2C-0. `pins_CREALITY_V4.h` selects it by itself
+  when `EEPROM_SETTINGS` is on. If the board last ran a printer, that chip still
+  holds a printer's settings blob: run `M502` then `M500` once on first boot
+  (§10). If `M500` errors while `M501` reads fine, the chip's WP pin is strapped.
+- **Losing the blob is not a brick.** A blank or wiped chip, or a version/CRC
+  mismatch, makes Marlin re-initialise the defaults from `Configuration.h`
+  (`EEPROM_AUTO_INIT`). Tuned gains are the only thing you would lose.
 - **One dummy X axis.** Unavoidable in current Marlin. It costs a few hundred
   bytes and some unused `G0`/`G28` surface. Do not send `G28` — nothing is wired
   to the X endstop.
@@ -270,7 +283,10 @@ Checked by reading `bugfix-2.1.x` source, not by compiling:
 - all three files have balanced `#if`/`#endif` nesting (checked mechanically);
 - array settings are sized for `NUM_AXES == 1` and `LOGICAL_AXES == 1`, and
   every `[HOTENDS]`/`[EXTRUDERS]` array in `temperature.cpp` is inside a
-  `HAS_HOTEND`-class guard, so no zero-length arrays are emitted;
+  `HAS_HOTEND`-class guard. The `[HOTENDS]`/`[EXTRUDERS]` arrays in
+  `settings.cpp` *do* collapse to zero length once `EEPROM_SETTINGS` is on; GCC
+  accepts that as an extension, the mfl environment sets no `-Werror`, and every
+  loop over them runs zero times;
 - no macro is defined twice across `Configuration.h` and `Configuration_adv.h`
   (checked mechanically; the only repeats inside `Configuration_adv.h` are the
   stock `#if MODE ==` fan blocks, which are mutually exclusive);
@@ -285,7 +301,10 @@ Checked by reading `bugfix-2.1.x` source, not by compiling:
 - `TEMP_SENSOR_REDUNDANT_SOURCE E1` resolves through `TEMP_1_PIN`, and the abort
   path cuts `TEMP_SENSOR_REDUNDANT_TARGET` (the chamber heater);
 - `SERIAL_PORT 2` is USART2 = PB10/PB11 in the GD32_MFL HAL (0-based serials);
-- `EEPROM_SETTINGS` really is a build error for this HAL, which is why §8 exists.
+- `EEPROM_SETTINGS` resolves to the board's 24C16, not to a HAL fallback:
+  `NO_EEPROM_SELECTED` in `pins_CREALITY_V4.h` defines `IIC_BL24CXX_EEPROM`
+  (`MARLIN_EEPROM_SIZE 0x800U`, `PA11`/`PA12`), and GD32_MFL ships
+  `eeprom_bl24cxx.cpp` for it. `FLASH_EEPROM_LEVELING` is what the HAL rejects.
 
 **Not verified: it has never been compiled or flashed.** No ARM toolchain or
 PlatformIO was available where this was written. Treat it as "should build" and
@@ -300,3 +319,108 @@ pio run -e GD32F303RE_creality_mfl
 ```
 
 Send back the first error and it gets fixed.
+
+---
+
+## 10. First run checklist
+
+For the first binary that builds. Work down the list; stop at the first step that
+fails. Nothing here needs the ESP32 firmware finished — a USB-serial adapter on
+`EXP3-03/04` plus a terminal at 250000 does the job.
+
+### A. Before power
+
+- [ ] Unplug the stock 12864 display. Its `EXP3` carries PB10/PB11 (§1).
+- [ ] Leave the TEC unplugged from `HEATER1` for now. The drive is checked first,
+      the load later.
+- [ ] Nothing in the X/Y/Z stepper sockets. X exists in firmware but the pins are
+      not wired to anything.
+- [ ] Exterior (cold-face) fan on its own supply, running. It is not on this board.
+- [ ] Flash at **0x08007000**, not 0x08000000 (§3).
+
+### B. First boot — prove comms and persistence
+
+- [ ] `M115` answers, no reset loop. A first-boot `EEPROM version mismatch`
+      followed by `EEPROM initialized` is expected: `EEPROM_AUTO_INIT` replaces
+      whatever the chip held with the defaults from `Configuration.h`.
+- [ ] **`M502` then `M500`, once.** Still do it. The automatic path only fires
+      when the old blob fails validation; it will not clean up a valid blob left
+      by an earlier build of this firmware. `M502` restores this file's defaults,
+      `M500` writes them, and everything after this point starts from a known state.
+- [ ] `M500` must answer `ok`. If it answers `EEPROM write error` while `M501` and
+      `M503` read fine, the chip's write-protect pin is strapped on that board —
+      tell me, and we fall back to compile-time gains.
+- [ ] `M503` — note the `M309 P.. I.. D..` line. That is the baseline to compare
+      against later.
+- [ ] Power-cycle, `M503` again. Identical = persistence works.
+- [ ] `M112`, then `M999`. Proves the emergency parser is in the build.
+
+### C. Sensors, cold, heater off
+
+- [ ] `M105` → `C:` within a couple of °C of the room.
+- [ ] `M105 R` → `R:` present, and close to `C:` (TEC unpowered, both at ambient).
+      `R:` missing or `0` means the PC5 probe or its table is wrong.
+- [ ] Compare `C:` against a separate thermometer sitting next to the probe. The
+      working band is only 3 °C wide (§4), so a table that reads 2 °C high is the
+      difference between 26 °C and 28 °C in the box. If it is off by more than
+      ~1 °C, stop here — we pick a different thermistor table.
+- [ ] Warm the chamber probe past 32 °C to test the trip — a probe in a sealed bag
+      of ~40 °C water is repeatable; a closed fist is marginal. Expect a MAXTEMP
+      report and Marlin stopping the machine; `M999` clears it. Safe with the TEC
+      unplugged.
+
+### D. Stir fan
+
+- [ ] `M141 S26` → PA0 fan spins up. `M141 S0` → it stops.
+- [ ] `M106` / `M107` do nothing to it. That is correct, not a fault (§6.2).
+
+### E. Heater drive, still no TEC
+
+- [ ] `M141 S26`, meter across `HEATER1`. The output should switch, averaging
+      towards ~25 % of the supply as the PID fights a cold probe.
+- [ ] Leave it: nothing heats, so after `WATCH_CHAMBER_TEMP_PERIOD` (300 s) Marlin
+      reports `Heating failed` and cuts the heater. **That is the desired result**
+      — it proves the cold-failure path before the TEC is ever connected.
+- [ ] `M999`, then `M141 S0`.
+
+### F. First real heat
+
+- [ ] TEC connected, hot face into the chamber, cold face outside with its fan.
+- [ ] A thermometer inside the box, next to the probe. **No sample for this run.**
+- [ ] Hand on the power switch. `M141 S24` — the lowest target, 75.2 °F.
+- [ ] `M105` every 30 s for 15 minutes. `C:` climbs slowly and settles near 24;
+      `R:` stays above `C:`. A °C or two of overshoot is normal (§5).
+- [ ] If `C:` passes ~28 °C, cut it: `M141 S0`, or `M112`.
+- [ ] `M141 S0` when done, confirm the fan stops and the output is off.
+
+### G. Redundant sensor
+
+- [ ] At a steady 26 °C, `M105 R`, record `gap = R − C`.
+- [ ] Set `TEMP_SENSOR_REDUNDANT_MAX_DIFF` to `gap + 25` in `Configuration.h` and
+      reflash. That is the one number in this build that has to be measured (§6.5).
+- [ ] Optional: unplug the TH1 probe → `R:` reads open, the chamber heater is cut
+      and the host gets `Redundant temp sensor`. Proves the abort path.
+
+### H. Tune, then persist
+
+- [ ] `M303 E-2 S26 C8`. It may well fail to converge at an 8 °C delta.
+- [ ] If it converges: `M309 P.. I.. D..`, `M500`, power-cycle, `M503` to confirm
+      the new gains came back.
+- [ ] If it fails: leave the shipped gains, and lean on `MAX_CHAMBER_POWER`.
+
+### Things that look like faults and are not
+
+| Symptom | Reality |
+|---|---|
+| `M141 S28` is accepted but settles at 27 | clamped to `CHAMBER_MAXTEMP − CHAMBER_OVERSHOOT` |
+| `R:` higher than `C:` | the plate is hotter than the air; that is the design |
+| 1–2 °C overshoot | stored heat in the plate (§5) |
+| `Heating failed` with no load attached | the 300 s watchdog doing its job (§E) |
+| `M503` shows `M309` values that differ from `DEFAULT_CHAMBER_KP` | EEPROM wins over the file, by design |
+
+### One thing that is not protected
+
+If the ESP32 dies mid-run, the chamber keeps holding its last target. Marlin has
+no host-timeout for `M141`. Whatever sends targets should also send `M141 S0` on
+shutdown, and a hardware cutout is still the only defence against a stuck
+MOSFET (§8).
