@@ -140,6 +140,7 @@ safety timing, or the stir fan.
 | `EMERGENCY_PARSER` | on | `M112` works while a move is queued |
 | `AUTO_REPORT_REDUNDANT` | on | `M155` auto-reports include the hot plate |
 | `FAN_KICKSTART_TIME` | `300` | starts a stalled 24 V fan |
+| `FAN_SOFT_PWM` | on | PA0 has no hardware PWM; `pins_CREALITY_V4.h` sets `FAN_SOFT_PWM_REQUIRED` |
 
 `MAX_CHAMBER_POWER` is `64` of 255 — 25 % duty. That is the real control on this
 machine, not the PID gains. It applies even in the loop's bypass branch
@@ -293,8 +294,9 @@ Checked by reading `bugfix-2.1.x` source, not by compiling:
 - `CHAMBER_FAN_MODE 0` needs only `CHAMBER_FAN_BASE`, and `CHAMBER_FAN_INDEX 0` is
   a real fan because `FAN0_PIN` exists on this board (`FAN_COUNT == 1`);
 - `flag_chamber_excess_heat` — the one static that enabling `CHAMBER_FAN` brings
-  into scope — is definitely used by the `PIDTEMPCHAMBER` branch at
-  `temperature.cpp:2195`, so it is not an unused-variable build risk;
+  into scope — is declared but, with `PIDTEMPCHAMBER` on, only read in the
+  non-PID `#else` branch, so GCC reports it as unused. Harmless warning, now
+  confirmed in a real build;
 - `CHAMBER_MAXTEMP 32` is not constrained by any sanity check, and the
   chamber ADC window is derived from it, so the trip and the sensor range stay
   consistent;
@@ -306,19 +308,36 @@ Checked by reading `bugfix-2.1.x` source, not by compiling:
   (`MARLIN_EEPROM_SIZE 0x800U`, `PA11`/`PA12`), and GD32_MFL ships
   `eeprom_bl24cxx.cpp` for it. `FLASH_EEPROM_LEVELING` is what the HAL rejects.
 
-**Not verified: it has never been compiled or flashed.** No ARM toolchain or
-PlatformIO was available where this was written. Treat it as "should build" and
-expect to fix the first compiler message, not as a tested image.
-
-The shortest path from here to a known-good build is:
+**Compiled on 2026-10-30.** The first attempt failed exactly one check, as
+predicted — `SanityCheck.h` refused `FAN_SOFT_PWM_REQUIRED` from
+`pins_CREALITY_V4.h` because `FAN_SOFT_PWM` was missing. That define is now in
+`Configuration_adv.h`, and the build is clean:
 
 ```bash
-python3 -m ensurepip
-python3 -m pip install platformio
+git clone --depth 1 -b bugfix-2.1.x https://github.com/MarlinFirmware/Marlin.git
+# copy Configuration.h, Configuration_adv.h, pins/pins_CHAMBER_V422_GD32.h
+# apply the two registrations in README §2
 pio run -e GD32F303RE_creality_mfl
 ```
 
-Send back the first error and it gets fixed.
+Result against `bugfix-2.1.x` at `983b6b8`:
+
+| | |
+|---|---|
+| Status | `SUCCESS`, 28 s clean build |
+| Flash | 64,120 bytes of 495,616 (12.9 %) |
+| RAM | 6,572 bytes of 65,536 (10.0 %) |
+| Image | `firmware-<timestamp>.bin`, load address `0x08007000` |
+| SHA-256 | build-specific; the version banner embeds the build time |
+
+Warnings are all benign and understood:
+
+- `flag_chamber_excess_heat` unused (above);
+- `seenZ`, `homeZZ` unused in `G28` for the single dummy X axis;
+- `EDITABLE_STEPS_PER_UNIT` not enabled, so `G92` is compile-time only.
+
+Not yet flashed. The next step is §10, starting at the image offset check and
+`M115`.
 
 ---
 

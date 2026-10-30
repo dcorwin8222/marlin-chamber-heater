@@ -598,6 +598,13 @@
 // @section fans
 
 /**
+ * Fan Soft PWM
+ * Required on this board: pins_CREALITY_V4.h sets FAN_SOFT_PWM_REQUIRED
+ * because FAN0 (PA0) has no hardware PWM timer on the STM32F1 map.
+ */
+#define FAN_SOFT_PWM
+
+/**
  * Part Cooling Fan Pins
  * Override the default part cooling fan pins for each fan index.
  * Allows remapping which physical fan pin is used for part cooling.
