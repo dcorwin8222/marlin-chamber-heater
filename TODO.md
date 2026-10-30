@@ -1,7 +1,7 @@
 # Host controller TODO — ESP32 / ESPHome
 
 Planning notes only. Nothing here is implemented. The Marlin side is finished and
-frozen; this is the host that talks to it at 250000 on `EXP3-03/04`.
+frozen; this is the host that talks to it at 115200 on `EXP3-03/04`.
 
 Related: `README.md` §1 (wiring) and §10 (first run) describe the Marlin side as it
 stands today, without a relay.

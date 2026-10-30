@@ -61,7 +61,9 @@
  *   3 = UART3 (PC10/PC11)                  4 = UART4 (PC12/PD2)
  */
 #define SERIAL_PORT 2
-#define BAUDRATE 250000
+#define BAUDRATE 115200
+// 115200: USARTDIV = (60 MHz + 57600) / 115200 = 521 -> 115,163 Bd, 0.03% error.
+// (250000 was exact: 240. Raise it again if the link proves clean at 115200.)
 
 //===========================================================================
 //============================= Machine =====================================

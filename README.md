@@ -22,7 +22,7 @@ cold face is outside the box and its exterior fan runs continuously, off-board.
 | `FAN` | PA0 | `FAN0_PIN` | Stir fan, driven by Marlin's `CHAMBER_FAN` |
 | `TB1` | PC4 | `TEMP_CHAMBER_PIN` | Chamber air NTC — controls the heater and carries the trip |
 | `TH1` | PC5 | `TEMP_1_PIN` | TEC hot-plate NTC — redundant monitor |
-| `EXP3-03/04` | PB10/PB11 | `SERIAL_PORT 2` (USART2) | Host UART, 250000 baud |
+| `EXP3-03/04` | PB10/PB11 | `SERIAL_PORT 2` (USART2) | Host UART, 115200 baud |
 
 `TB1` and `TH1` are just the two ADC inputs; the silkscreen names them bed and
 hotend. Both are 100K NTCs — only the macro decides which is which.
@@ -35,7 +35,7 @@ stops it when `M141 S0` clears the target.
 **Unplug the stock 12864 display.** Its EXP3 header carries PB10/PB11, which are
 now the host UART.
 
-**Baud rate is 250000** (`Configuration.h`). Match it on the ESP32.
+**Baud rate is 115200** (`Configuration.h`). Match it on the ESP32.
 
 ---
 
@@ -345,7 +345,7 @@ Not yet flashed. The next step is §10, starting at the image offset check and
 
 For the first binary that builds. Work down the list; stop at the first step that
 fails. Nothing here needs the ESP32 firmware finished — a USB-serial adapter on
-`EXP3-03/04` plus a terminal at 250000 does the job.
+`EXP3-03/04` plus a terminal at 115200 does the job.
 
 ### A. Before power
 
