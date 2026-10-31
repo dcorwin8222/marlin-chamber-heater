@@ -145,8 +145,10 @@ the control loop.
 - [ ] Local LED/buzzer for fault, so the room reports without HA.
 - [ ] Raw serial passthrough for debugging.
 - [ ] OTA, uptime, RSSI.
-- [ ] Exterior fan control — **only** if that fan ever moves onto the ESP32. It
-      currently runs continuously off-board; leave it.
+- [x] **Case/hot-side fan: hardwired to the fan rail, always on.** Decided
+      2026-10-31. Not on PA0, not on the ESP32, no GPIO. Runs whenever the machine
+      has power, including through the post-heat soak. The only fan Marlin drives
+      is the stir fan on PA0 (`CHAMBER_FAN`, 200/255 whenever a target is set).
 
 ---
 

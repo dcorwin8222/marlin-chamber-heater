@@ -19,7 +19,7 @@ cold face is outside the box and its exterior fan runs continuously, off-board.
 | Board connector | MCU pin | Marlin macro | Function |
 |---|---|---|---|
 | `HEATER1` | PA1 | `HEATER_CHAMBER_PIN` | TEC drive (hot face into the chamber) |
-| `FAN` | PA0 | `FAN0_PIN` | Stir fan, driven by Marlin's `CHAMBER_FAN` |
+| `FAN` | PA0 | `FAN0_PIN` | Stir (mixing) fan only, driven by Marlin's `CHAMBER_FAN` |
 | `TB1` | PC4 | `TEMP_CHAMBER_PIN` | Chamber air NTC — controls the heater and carries the trip |
 | `TH1` | PC5 | `TEMP_1_PIN` | TEC hot-plate NTC — redundant monitor |
 | `EXP3-03/04` | PB10/PB11 | `SERIAL_PORT 2` (USART2) | Host UART, 115200 baud |
@@ -31,6 +31,13 @@ The stir fan is not optional. Without air movement the hot plate forms a plume,
 PC4 sits in cooler air, the PID keeps driving, and the sample cooks while the
 sensor reads 76 °F. `CHAMBER_FAN` runs PA0 whenever a chamber target is set and
 stops it when `M141 S0` clears the target.
+
+The case (TEC hot-side) fan is **not** on PA0. It is wired straight to the fan
+rail and runs whenever the machine has power — the hot side needs airflow
+whenever the TEC is powered, not only while a chamber target is set, and it must
+keep running through the post-heat soak after `M141 S0`. If it is a 4-wire fan,
+leave its PWM lead unconnected and let it run full speed; PA0's 7.63 Hz soft PWM
+is the wrong signal for a 4-pin fan anyway.
 
 **Unplug the stock 12864 display.** Its EXP3 header carries PB10/PB11, which are
 now the host UART.
